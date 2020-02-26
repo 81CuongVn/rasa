@@ -1,0 +1,65 @@
+name: Dependency Update Check
+
+on:
+#  schedule:
+#    # run this job every day at 5am
+#    - cron:  '* 5 * * *'
+  push
+
+# - SLACK_WEBHOOK_TOKEN: token to post to RasaHQ slack account (in 1password)
+
+env:
+  # needed to fix issues with boto during testing:
+  # https://github.com/travis-ci/travis-ci/issues/7940
+  BOTO_CONFIG: /dev/null
+  PIP_USE_PEP517: false
+
+jobs:
+  test:
+    name: Run Tests with updated dependencies
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        python-version: [3.6, 3.7]
+
+    steps:
+    - name: Checkout git repository 🕝
+      uses: actions/checkout@v2
+
+    - name: Set up Python ${{ matrix.python-version }} 🐍
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Read Poetry Version 🔢
+      run: |
+        echo "::set-env name=POETRY_VERSION::$(scripts/poetry-version.sh)"
+      shell: bash
+
+    - name: Install poetry 🦄
+      uses: Gr1N/setup-poetry@v1
+      with:
+        poetry-version: ${{ env.POETRY_VERSION }}
+
+    - name: Install Dependencies 📦
+      run: |
+        sudo apt-get -y install libpq-dev
+        poetry update
+        make install-full
+        make prepare-tests-ubuntu
+
+    - name: Test Code 🔍
+      run: JOBS=2 make test
+
+    - name: Slack Notification
+      uses: rtCamp/action-slack-notify@v2.0.1
+      if: failure()
+      env:
+        SLACK_CHANNEL: product-engineering
+        SLACK_COLOR: '#FF0000'
+        SLACK_ICON: https://github.com/rasabot.png?size=48
+        SLACK_MESSAGE: 'Rasa Open Source automated master build failed. This build checks if an update to the most recent allowed versions of our dependencies breaks our tests. Someone needs to look into this to make sure users do not end up with broken installations!'
+        SLACK_TITLE: Automated Build Result
+        SLACK_USERNAME: scheduled-build
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_TOKEN }}
