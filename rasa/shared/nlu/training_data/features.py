@@ -205,7 +205,7 @@ class Features:
 
     @staticmethod
     def groupby_attribute(
-        features_list: List[Features], attributes: Optional[Iterable[Text]] = None,
+        features_list: List[Features], attributes: Optional[Iterable[Text]] = None
     ) -> Dict[Text, List[Features]]:
         """Groups the given features according to their attribute.
 
@@ -236,7 +236,7 @@ class Features:
 
     @staticmethod
     def combine(
-        features_list: List[Features], expected_origins: Optional[List[Text]] = None,
+        features_list: List[Features], expected_origins: Optional[List[Text]] = None
     ) -> Features:
         """Combine features of the same type and level that describe the same attribute.
 
@@ -280,22 +280,12 @@ class Features:
                 ):
                     if expected != actual:
                         raise ValueError(
-                            f"Expected {expected} to be the origin of the {idx}-th "
+                            f"Expected '{expected}' to be the origin of the {idx}-th "
                             f"feature (because of `origin_of_combination`) but found a "
-                            f"feature from {actual}."
+                            f"feature from '{actual}'."
                         )
-        else:
-            origins: Set[Tuple[Text]] = set(
-                tuple(f.origin) if not isinstance(f.origin, Text) else (f.origin,)
-                for f in features_list
-            )
-            if len(origins) > 1:
-                raise ValueError(
-                    f"Expected all Features to have the same origin "
-                    f"found the following origins: {origins}."
-                )
         # (2) attributes (is_sparse, type, attribute) must coincide
-        # Note: we could also use `filter` for this check, but then the erorr msgs
+        # Note: we could also use `filter` for this check, but then the error msgs
         # aren't as nice.
         sparseness: Set[bool] = set(f.is_sparse() for f in features_list)
         if len(sparseness) > 1:
@@ -366,16 +356,16 @@ class Features:
             )
         output = []
         for is_sparse in [True, False]:
-            # all sparse featues before all dense features
+            # all sparse features before all dense features
             for type in [FEATURE_TYPE_SEQUENCE, FEATURE_TYPE_SENTENCE]:
                 # sequence feature that is (not) sparse before sentence feature that is
-                #  (not) sparse
+                # (not) sparse
                 sublist = Features.filter(
-                    features_list=features_list, type=type, is_sparse=is_sparse,
+                    features_list=features_list, type=type, is_sparse=is_sparse
                 )
                 if sublist:
                     combined_feature = Features.combine(
-                        sublist, expected_origins=expected_origins,
+                        sublist, expected_origins=expected_origins
                     )
                     output.append(combined_feature)
         return output

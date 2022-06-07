@@ -12,9 +12,8 @@ from typing import (
     Text,
     Dict,
     Callable,
-    Type,
-    Union,
     Tuple,
+    TypeVar,
     TYPE_CHECKING,
 )
 
@@ -24,15 +23,9 @@ from rasa.engine.graph import GraphComponent, ExecutionContext
 from rasa.engine.storage.resource import Resource
 from rasa.engine.storage.storage import ModelStorage
 from rasa.core.featurizers.precomputation import MessageContainerForCoreFeaturization
-from rasa.core.featurizers.tracker_featurizers import (
-    TrackerFeaturizer2 as TrackerFeaturizer,
-)
-from rasa.core.featurizers.tracker_featurizers import (
-    MaxHistoryTrackerFeaturizer2 as MaxHistoryTrackerFeaturizer,
-)
-from rasa.core.featurizers.single_state_featurizer import (
-    SingleStateFeaturizer2 as SingleStateFeaturizer,
-)
+from rasa.core.featurizers.tracker_featurizers import TrackerFeaturizer
+from rasa.core.featurizers.tracker_featurizers import MaxHistoryTrackerFeaturizer
+from rasa.core.featurizers.single_state_featurizer import SingleStateFeaturizer
 from rasa.core.featurizers.tracker_featurizers import FEATURIZER_FILE
 import rasa.utils.common
 import rasa.shared.utils.io
@@ -46,17 +39,9 @@ from rasa.core.constants import (
     POLICY_PRIORITY,
     POLICY_MAX_HISTORY,
 )
-from rasa.shared.core.constants import (
-    USER,
-    SLOTS,
-    PREVIOUS_ACTION,
-    ACTIVE_LOOP,
-)
+from rasa.shared.core.constants import USER, SLOTS, PREVIOUS_ACTION, ACTIVE_LOOP
 import rasa.shared.utils.common
 
-
-# All code outside this module will continue to use the old `Policy` interface
-from rasa.core.policies._policy import Policy
 
 if TYPE_CHECKING:
     from rasa.shared.nlu.training_data.features import Features
@@ -64,9 +49,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# TODO: This is a workaround around until we have all components migrated to
-# `GraphComponent`.
-Policy = Policy
+TrackerListTypeVar = TypeVar(
+    "TrackerListTypeVar", List[DialogueStateTracker], List[TrackerWithCachedStates]
+)
 
 
 class SupportedData(Enum):
@@ -82,21 +67,19 @@ class SupportedData(Enum):
     ML_AND_RULE_DATA = 3
 
     @staticmethod
-    def trackers_for_policy(
-        policy: Union[Policy, Type[Policy]],
-        trackers: Union[List[DialogueStateTracker], List[TrackerWithCachedStates]],
-    ) -> Union[List[DialogueStateTracker], List[TrackerWithCachedStates]]:
+    def trackers_for_supported_data(
+        supported_data: SupportedData,
+        trackers: TrackerListTypeVar,
+    ) -> TrackerListTypeVar:
         """Return trackers for a given policy.
 
         Args:
-            policy: Policy or policy type to return trackers for.
+            supported_data: Supported data filter for the `trackers`.
             trackers: Trackers to split.
 
         Returns:
             Trackers from ML-based training data and/or rule-based data.
         """
-        supported_data = policy.supported_data()
-
         if supported_data == SupportedData.RULE_DATA:
             return [tracker for tracker in trackers if tracker.is_rule_tracker]
 
@@ -107,7 +90,7 @@ class SupportedData(Enum):
         return trackers
 
 
-class PolicyGraphComponent(GraphComponent):
+class Policy(GraphComponent):
     """Common parent class for all dialogue policies."""
 
     @staticmethod
@@ -150,7 +133,7 @@ class PolicyGraphComponent(GraphComponent):
         resource: Resource,
         execution_context: ExecutionContext,
         **kwargs: Any,
-    ) -> PolicyGraphComponent:
+    ) -> Policy:
         """Creates a new untrained policy (see parent class for full docstring)."""
         return cls(config, model_storage, resource, execution_context)
 
@@ -420,7 +403,7 @@ class PolicyGraphComponent(GraphComponent):
         resource: Resource,
         execution_context: ExecutionContext,
         **kwargs: Any,
-    ) -> "PolicyGraphComponent":
+    ) -> Policy:
         """Loads a trained policy (see parent class for full docstring)."""
         featurizer = None
 
@@ -432,13 +415,13 @@ class PolicyGraphComponent(GraphComponent):
                 config.update(kwargs)
 
         except (ValueError, FileNotFoundError, FileIOException):
-            logger.info(
+            logger.debug(
                 f"Couldn't load metadata for policy '{cls.__name__}' as the persisted "
                 f"metadata couldn't be loaded."
             )
 
         return cls(
-            config, model_storage, resource, execution_context, featurizer=featurizer,
+            config, model_storage, resource, execution_context, featurizer=featurizer
         )
 
     def _default_predictions(self, domain: Domain) -> List[float]:
@@ -501,6 +484,10 @@ class PolicyGraphComponent(GraphComponent):
 
         return "\n".join(formatted_states)
 
+    def __repr__(self) -> Text:
+        """Returns text representation of object."""
+        return f"{self.__class__.__name__}@{id(self)}"
+
 
 class PolicyPrediction:
     """Stores information about the prediction of a `Policy`."""
@@ -547,7 +534,7 @@ class PolicyPrediction:
         """
         self.probabilities = probabilities
         self.policy_name = policy_name
-        self.policy_priority = (policy_priority,)
+        self.policy_priority = policy_priority
         self.events = events or []
         self.optional_events = optional_events or []
         self.is_end_to_end_prediction = is_end_to_end_prediction
@@ -563,7 +550,7 @@ class PolicyPrediction:
         policy_name: Optional[Text] = None,
         confidence: float = 1.0,
         action_metadata: Optional[Dict[Text, Any]] = None,
-    ) -> PolicyPrediction:
+    ) -> "PolicyPrediction":
         """Create a prediction for a given action.
 
         Args:
@@ -599,7 +586,7 @@ class PolicyPrediction:
             and self.policy_name == other.policy_name
             and self.policy_priority == other.policy_priority
             and self.events == other.events
-            and self.optional_events == other.events
+            and self.optional_events == other.optional_events
             and self.is_end_to_end_prediction == other.is_end_to_end_prediction
             and self.is_no_user_prediction == other.is_no_user_prediction
             and self.hide_rule_turn == other.hide_rule_turn
@@ -619,10 +606,10 @@ class PolicyPrediction:
 
     @property
     def max_confidence(self) -> float:
-        """Gets the highest predicted probability.
+        """Gets the highest predicted confidence.
 
         Returns:
-            The highest predicted probability.
+            The highest predicted confidence.
         """
         return max(self.probabilities, default=0.0)
 
