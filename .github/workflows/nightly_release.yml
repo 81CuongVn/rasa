@@ -1,9 +1,11 @@
 name: Nightly Builds
 on:
-  schedule:
-    # Runs every weekday at 1am
-    - cron: 0 1 * * 1-5
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
 
 
 jobs:
@@ -19,7 +21,7 @@ jobs:
 
       - name: Run script
         run: |
-          ./scripts/prepare_nightly_release.py
+          chmod +rx ./scripts/prepare_nightly_release.py
 
       - name: Compose tag name
         id: set_tagname
@@ -50,7 +52,6 @@ jobs:
               repo: context.repo.repo,
               ref: "refs/tags/${{ steps.set_tagname.outputs.tag }}",
               sha: context.sha
-              description: "development build for internal use"
             })
 
 
